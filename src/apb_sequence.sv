@@ -1,32 +1,32 @@
 class apb_sequence extends uvm_sequence#(apb_sequence_item); // normal sequence .....
   `uvm_object_utils(apb_sequence)
-  
+
   function new(string name = "apb_sequence");
     super.new(name);
   endfunction
-  
+
   task body();
     repeat(`no_of_transaction) begin
       req = apb_sequence_item::type_id::create("req");
       wait_for_grant();
-      void'(req.randomize()); 
+      void'(req.randomize());
       send_request(req);
       wait_for_item_done();
-    end 
+    end
   endtask
 endclass
 
 class apb_sequence_write_read extends apb_sequence;
   `uvm_object_utils(apb_sequence_write_read)
-  
+
   bit OP;
   int count;
   bit [`ADDR_WIDTH-2:0] addr;
-  
+
   function new(string name = "apb_sequence_write_read");
     super.new(name);
   endfunction
-  
+
   task body();
     repeat(`no_of_transaction )begin
       req = apb_sequence_item::type_id::create("req");
@@ -40,22 +40,22 @@ class apb_sequence_write_read extends apb_sequence;
         count =0;
         addr++; // incrementing the address
       end
-    end 
+    end
   endtask
-  
+
 endclass
 
 class apb_sequence_different_slave extends apb_sequence;
   `uvm_object_utils(apb_sequence_different_slave)
- 
+
   bit OP, slave_select; // slave select for alternative selection !
   int count;
   bit [`ADDR_WIDTH-2:0] addr;
-  
+
   function new(string name = "apb_sequence_different_slave");
     super.new(name);
   endfunction
-  
+
   task body();
     count = 0;
     OP = 0;
@@ -72,8 +72,8 @@ class apb_sequence_different_slave extends apb_sequence;
         addr++; // incrementing the address
         slave_select = ~slave_select;
       end
-    end 
-  endtask 
+    end
+  endtask
 endclass
 
 class apb_sequence_transfer_t extends apb_sequence;
@@ -81,11 +81,11 @@ class apb_sequence_transfer_t extends apb_sequence;
   bit trans_scl, OP;
   int count;
   bit [`ADDR_WIDTH-2:0] addr;
-  
+
   function new(string name = "apb_sequence_transfer_t");
     super.new(name);
   endfunction
-  
+
   task body();
     repeat(`no_of_transaction) begin
       req = apb_sequence_item::type_id::create("req");
@@ -100,7 +100,7 @@ class apb_sequence_transfer_t extends apb_sequence;
         addr = addr + 4;
         trans_scl = ~trans_scl;
       end
-    end 
+    end
   endtask
 endclass
 
@@ -109,18 +109,18 @@ class apb_continuous_write_read extends apb_sequence; // 5-write and 5-read cont
   bit OP;
   int count;
   bit [`ADDR_WIDTH-2:0] addr,temp_addr;
-  
+
   function new(string name = "apb_continuous_write_read");
     super.new(name);
   endfunction
-  
+
   task body();
     addr = $urandom(); // random address !
     temp_addr = addr; // store it in temperary variable
     repeat(`no_of_transaction) begin
       req = apb_sequence_item::type_id::create("req");
       wait_for_grant();
-      void'(req.randomize() with {req.READ_WRITE == OP; req.apb_write_paddr[`ADDR_WIDTH-2:0] == addr; req.apb_write_paddr[`ADDR_WIDTH-1] == 0;}  ); 
+      void'(req.randomize() with {req.READ_WRITE == OP; req.apb_write_paddr[`ADDR_WIDTH-2:0] == addr; req.apb_write_paddr[`ADDR_WIDTH-1] == 0;}  );
       send_request(req);
       wait_for_item_done();
       count++;
@@ -132,10 +132,39 @@ class apb_continuous_write_read extends apb_sequence; // 5-write and 5-read cont
       if(count == 10) begin
         count = 0; // clear the counter !!
         addr = $urandom();
-        temp_addr = addr; 
+        temp_addr = addr;
         OP = 0; // fix it write operation !
       end
-    end 
+    end
+  endtask
+endclass
+
+class apb_error_condition extends apb_sequence;
+   `uvm_object_utils(apb_error_condition)
+  bit OP;
+  int count;
+  bit slave_select;
+  function new(string name = "apb_error_condition");
+    super.new(name);
+  endfunction
+
+  task body();
+    repeat(`no_of_transaction) begin
+      req = apb_sequence_item::type_id::create("req");
+      wait_for_grant();
+       void'(req.randomize() with {req.READ_WRITE == OP; req.apb_write_paddr[`ADDR_WIDTH-1] ==slave_select ;req.apb_read_paddr[`ADDR_WIDTH-1] ==slave_select ;req.transfer == 1;} ); // const slave with toggling transfer for every 2nd operation !!
+      req.apb_write_paddr =8'bxxxxxxxx;
+      req.apb_read_paddr = 8'bxxxxxxxx;
+      req.apb_write_data = 8'bxxxxxxxx;
+       send_request(req);
+      wait_for_item_done();
+      OP = ~OP; // write read conti....
+      count++;
+      if(count == 2)begin
+          count = 0;
+          slave_select = ~slave_select;
+      end
+    end
   endtask
 endclass
 
@@ -145,24 +174,27 @@ class apb_regression_seq extends apb_sequence;
   apb_sequence_different_slave seq2;
   apb_sequence_transfer_t seq3;
   apb_continuous_write_read seq4;
-  
+  apb_error_condition seq5;
+
   `uvm_object_utils(apb_regression_seq)
-  
+
   function new(string name = "apb_regression_seq");
-    	super.new(name);
-  	endfunction
-  
+      super.new(name);
+    endfunction
+
   virtual task body();
 //     seq_rnd = apb_sequence::type_id::create("seq_random");
 //     seq1 = apb_sequence_write_read::type_id::create("seq1");
 //     seq2 = apb_sequence_different_slave::type_id::create("seq2");
 //     seq3 = apb_sequence_transfer_t::type_id::create("seq3");
 //     seq4 = apb_continuous_write_read::type_id::create("seq4");
-    `uvm_do(seq_rnd)
+//     seq5 = apb_error_condition::type_id::create("seq5");
+    `uvm_do(seq5)
     `uvm_do(seq1)
     `uvm_do(seq2)
     `uvm_do(seq3)
     `uvm_do(seq4)
+    `uvm_do(seq_rnd)
   endtask
-  
+
 endclass
